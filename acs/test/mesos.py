@@ -1,16 +1,18 @@
 #!/usr/bin/python
 
 from acs.acs_utils import ACSLog
+from acs.acs_utils import ACSUtils
+
 import requests
+import unittest
 import sys
 import time
 
-class MesosTest:
-    def __init__(self, acs):
-        self.acs = acs
+class MesosTest(unittest.TestCase):
+    def setUp(self):
         self.log = ACSLog()
 
-    def testAll(self):
+    def test_all(self):
         """Run all tests against the supplied ACS"""
 
         response = self.acs.openMesosTunnel()
@@ -50,4 +52,5 @@ class MesosTest:
         self.acs.marathonCommand('groups/azure?force=true', 'DELETE')
         self.log.info("End")
 
-
+if __name__ == '__main__':
+    unittest.main()

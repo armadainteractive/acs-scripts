@@ -1,11 +1,12 @@
 #!/usr/bin/python
 
 from acs.acs_utils import *
-from acs.test.MesosTest import *
-from acs.test.SwarmTest import *
+from acs.test.mesos import MesosTest
+from acs.test.swarm import SwarmTest
 
 import optparse
 import sys
+import unittest
          
 def main():
     """ACS command line tool"""
@@ -14,7 +15,7 @@ def main():
     usage = usage + "Commands:\n\n"
     usage = usage + "deploy: deploy a cluster\n\n"
     usage = usage + "delete: delete a cluster\n\n"
-    usage = usage + "test [mesos|swarm]: test a mesos or swarm cluster\n\n"
+    usage = usage + "test: test a cluster\n\n"
     usage = usage + "addFeature FEATURES: add one or mroe features to a cluster\n"
     usage = usage + "\tFEATURES is a comma separated list of features to add.\n\n"
     usage = usage + "docker 'DOCKER COMMAND': run a Docker CLI command on all agents.\n\n"
@@ -37,11 +38,12 @@ def main():
         acs.addFeatures()
         acs.openMesosTunnel()
     elif cmd == "test":
+        MesosTest.acs = acs
         mode = acs.getMode()
         if mode == "mesos":
             log.debug("Test Mesos mode")
-            test = MesosTest(acs)
-            test.test_all()
+            suite = unittest.TestLoader().loadTestsFromTestCase(MesosTest)
+            unittest.TextTestRunner(verbosity=2).run(suite)
         elif mode == "swarm":
             log.debug("Test Swarm mode")
             test = SwarmTest(acs)
