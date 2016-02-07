@@ -3,6 +3,7 @@
 from acs.acs_utils import ACSLog
 from acs.acs_utils import ACSUtils
 
+import json
 import requests
 import unittest
 import sys
@@ -12,16 +13,20 @@ class MesosTest(unittest.TestCase):
     def setUp(self):
         self.log = ACSLog()
 
-    def test_all(self):
-        """Run all tests against the supplied ACS"""
+    def testApps(self):
+        """Check there are no apps installed on the cluster"""
 
-        response = self.acs.openMesosTunnel()
-        self.log.info(response);
-
-        self.log.info("Start: Check current apps")
-        self.log.debug(self.acs.marathonCommand('apps'))
-        self.log.info("End")
+        response = self.acs.marathonCommand('apps')
         
+        data = json.loads(response)
+        apps = data["apps"]
+
+        self.assertEqual(len(apps),  0, "Should have no apps deployed")
+
+    @unittest.skip("Skip deploy while we make the testAPI work")
+    def testDeploy(self):
+        """Deploy a simple containerized application and verify it runs correctly."""
+
         self.log.info("Deploy a two container app")
         with open ('marathon-app.json', "r") as marathonfile:
             data=marathonfile.read().replace('\n', '').replace("\"", "\\\"")
@@ -47,6 +52,10 @@ class MesosTest(unittest.TestCase):
         if i >= 9: 
             self.log.error("TESTING: Application never responded")
         self.log.info("End")
+
+    @unittest.skip("Skip testDelete while we make testAPI work")
+    def testDelete(self):
+        """Test that the delete API works"""
 
         self.log.info("Remove the app")
         self.acs.marathonCommand('groups/azure?force=true', 'DELETE')
