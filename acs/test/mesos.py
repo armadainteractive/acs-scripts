@@ -14,12 +14,10 @@ class MesosTest(unittest.TestCase):
         self.log = ACSLog()
         self.log.debug("setUp the test environment")
         self.acs.marathonCommand('groups/azure?force=true', 'DELETE')
-        time.sleep(3)
 
     def tearDown(self):
         self.log.debug("tearDown the test environment")
         self.acs.marathonCommand('groups/azure?force=true', 'DELETE')
-        time.sleep(3)
 
     def getAppData(self):
         response = self.acs.marathonCommand('apps')
