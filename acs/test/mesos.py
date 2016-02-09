@@ -12,27 +12,41 @@ import time
 class MesosTest(unittest.TestCase):
     def setUp(self):
         self.log = ACSLog()
+        self.log.debug("setUp the test environment")
+        self.acs.marathonCommand('groups/azure?force=true', 'DELETE')
+        time.sleep(3)
 
-    def testApps(self):
-        """Check there are no apps installed on the cluster"""
+    def tearDown(self):
+        self.log.debug("tearDown the test environment")
+        self.acs.marathonCommand('groups/azure?force=true', 'DELETE')
+        time.sleep(3)
 
+    def getAppData(self):
         response = self.acs.marathonCommand('apps')
-        
+        self.log.debug(response)
+
         data = json.loads(response)
-        apps = data["apps"]
+        return data["apps"]
 
-        self.assertEqual(len(apps),  0, "Should have no apps deployed")
-
-    @unittest.skip("Skip deploy while we make the testAPI work")
-    def testDeploy(self):
-        """Deploy a simple containerized application and verify it runs correctly."""
-
-        self.log.info("Deploy a two container app")
+    def deployApp(self):
         with open ('marathon-app.json', "r") as marathonfile:
             data=marathonfile.read().replace('\n', '').replace("\"", "\\\"")
 
-        self.log.debug(self.acs.marathonCommand('groups', 'POST', data))
-        self.log.debug("End")
+        response = self.acs.marathonCommand('groups?force=True', 'POST', data)
+        self.log.debug("deployment response: " + response)
+
+    def testAppsAPI(self):
+        """
+        Check there are no apps installed on the cluster
+        """
+        apps = self.getAppData()
+        self.assertEqual(len(apps),  0, "Should have no apps deployed. App count: " + str(len(apps)))
+
+    @unittest.skip("Skip while we make testDeleteAPI work")
+    def testDeploy(self):
+        """Deploy a simple containerized application and verify it runs correctly."""
+
+        self.deployApp()
 
         url = "http://" + self.acs.getAgentsFQDN()
         self.log.debug("Check the application is running and accessible at " + url)
@@ -53,13 +67,21 @@ class MesosTest(unittest.TestCase):
             self.log.error("TESTING: Application never responded")
         self.log.info("End")
 
-    @unittest.skip("Skip testDelete while we make testAPI work")
-    def testDelete(self):
-        """Test that the delete API works"""
+    def testDeleteAPI(self):
+        """
+        Test that the delete API works
+        """
 
-        self.log.info("Remove the app")
+        self.deployApp()
+
+        apps = self.getAppData()
+        app_count = len(apps)
+        self.assertTrue(app_count >  1, "There are no apps deployed for us to delete")
+
         self.acs.marathonCommand('groups/azure?force=true', 'DELETE')
-        self.log.info("End")
+
+        apps = self.getAppData()
+        self.assertTrue(len(apps) < app_count, "We failed to delete an application. Original app count: " + str(app_count) + " app count after deletion: " + str(len(apps)))
 
 if __name__ == '__main__':
     unittest.main()
