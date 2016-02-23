@@ -40,7 +40,6 @@ class MesosTest(unittest.TestCase):
         apps = self.getAppData()
         self.assertEqual(len(apps),  0, "Should have no apps deployed. App count: " + str(len(apps)))
 
-    @unittest.skip("Skip while we make testDeleteAPI work")
     def testDeploy(self):
         """Deploy a simple containerized application and verify it runs correctly."""
 
@@ -48,22 +47,20 @@ class MesosTest(unittest.TestCase):
 
         url = "http://" + self.acs.getAgentsFQDN()
         self.log.debug("Check the application is running and accessible at " + url)
-        for i in range (0,10):
+        for i in range (1,10):
             self.log.debug("Attempt to access service " + str(i) + " of 10")
             try:
                 r = requests.get(url)
                 if r.status_code == 200:
-                    self.log.debug("Got a 200 response from the application")
-                    break
+                    self.log.debug("Got a success response from the application")
+                    pass
             except:
                 e = sys.exc_info()[0]
                 self.log.debug("Attempt failed: " + str(e))
                 self.log.debug("Sleeping for 5 seconds")
                 time.sleep (5)
 
-        if i >= 9: 
-            self.log.error("TESTING: Application never responded")
-        self.log.info("End")
+        self.assertTrue(i < 10, "Application never responded")
 
     def testDeleteAPI(self):
         """
