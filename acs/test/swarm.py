@@ -2,9 +2,10 @@
 
 from acs.acs_utils import ACSLog
 
+import unittest
+
 class SwarmTest:
-    def __init__(self, acs):
-        self.acs = acs
+    def setUp(self):
         self.log = ACSLog()
 
     def testAll(self):
