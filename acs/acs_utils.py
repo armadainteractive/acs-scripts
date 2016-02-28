@@ -211,6 +211,32 @@ OA        Execute command on the current master leader
         out = subprocess.check_output(sshCmd, shell=True)
         self.log.debug("Output:\n" + out)
 
+    def addAutoscale(self):
+        """
+        Add or update AutoScale configuration for the Agent Pool.
+        """
+        
+        # At present the Linux Diagnostics Extension is not enabled on
+        # the agents by default, we need to install it on them all
+        agentPool = AgentPool(self.config)
+        agents = agentPool.getAgents()
+        for agent in agents:
+            self.log.debug("Installing Linux Diagnostics Extention on " + agent["name"])
+            rg = self.config.get("Group", "name")
+
+            storage_name = self.config.get("Diagnostics", "storage_account_name")
+            self.log.warning("FIXME: Storage account key is currently hard coded in acs_utils - will break if we use a different storage account")
+            storage_key = "BYq60754g1tBe8tKx7VcpdNt955s1pBVJrbbq8RDqeSnev+bWJ+KdDcgws9vumC3aV0DJM04g0OsyuAtP8v1fw=="
+            private_config = {
+                "storageAccountName": storage_name,
+                "storageAccountKey": storage_key
+            }
+            cmd = "azure vm extension set " + agent["name"] + " LinuxDiagnostic Microsoft.OSTCExtensions 2.* --resource-group " + rg + " --private-config " + json.dumps(private_config)
+            out = subprocess.check_output(cmd, shell=True)
+
+            self.log.error("Autoscale won't work without the Linux Diagnostics Agent")
+            # Now we need to deploy the autoscale template
+            self.log.error("We need to deploy the autoscale template too")
 
     def executeOnAgent(self, cmd, agent_name):
         """
@@ -255,6 +281,8 @@ OA        Execute command on the current master leader
                 self.addAzureFileService(hosts)
             elif feature == "oms":
                 self.addOMS()
+            elif feature == "autoscale":
+                self.addAutoscale()
             elif feature[:5] == "pull ":
                 print("'addFeature pull' is deprecated. Please use 'docker pull' instead")
                 self.agentDockerCommand(feature)
