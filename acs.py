@@ -3,6 +3,7 @@
 from acs.acs_utils import *
 from acs.test.mesos import MesosTest
 from acs.test.swarm import SwarmTest
+from acs.test.afs_test import *
 
 import optparse
 import sys
@@ -38,18 +39,29 @@ def main():
         acs.addFeatures()
         acs.openMesosTunnel()
     elif cmd == "test":
-        MesosTest.acs = acs
-        mode = acs.getMode()
-        if mode == "mesos":
-            log.debug("Test Mesos mode")
-            suite = unittest.TestLoader().loadTestsFromTestCase(MesosTest)
-            unittest.TextTestRunner(verbosity=2).run(suite)
-        elif mode == "swarm":
-            log.debug("Test Swarm mode")
-            test = SwarmTest(acs)
-            test.testAll()
+        if arguments[1] == "deploy":
+            mode = acs.getMode()
+            log.debug("Testing deployment using mode: " + mode)
+            if mode == "mesos":
+                log.debug("Test Mesos mode")
+                test = MesosTest(acs)
+                test.test_all()
+            elif mode == "swarm":
+                log.debug("Test Swarm mode")
+                test = SwarmTest(acs)
+                test.testAll()
+            else:
+                log.error("Don't know how to test deployment mode: " + mode)
+        elif arguments[1] == "feature":
+            feature = arguments[2]
+            if feature == "afs":
+                log.debug("Test AFS Feature")
+                test = AFSTest(acs)
+                test.testAll()
+            else: 
+                log.error("Don't know how to test feature " + feature)
         else:
-            log.error("Don't know how to test mode " + mode)
+            log.error("Unrecognized testing profile")
     elif cmd == "addFeature":
         featureList = arguments[1]
         log.debug("Features: " + featureList)

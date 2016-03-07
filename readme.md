@@ -113,12 +113,17 @@ NOTE: for this command to work you must have opened an SSH Tunnel to
 your cluster, or you must run the command from a VM inside the
 clusters VNET.
 
-`test` will deploy some test applications and ensure they are started
+There are a number of sub-commands to the `test` command. These are
+described below:
+
+### Test Deployment
+
+`test deploy` will deploy some test applications and ensure they are started
 correctly on the cluster. The tests will be run against a cluster
 defined in the cluster.ini file (or the file specified with -c).
 
 ```bash
-python acs.py test [-c CONFIG_FILE]
+python acs.py test deploy [-c CONFIG_FILE]
 ```
 
 This command performs various actions, such as deploying a
@@ -126,3 +131,11 @@ multi-container application and verifying it is working correctly. The
 log outputs of these test scripts detail the commands being run and
 can therefore be useful as a learning excercise, as well as testing
 whether the cluster is correctly configured.
+
+### Test Features
+
+`test feature FEATURE_NAME` will test the deployment of a named features.
+
+```bash
+acs.py test deploy FEATURE_NAME [-c CONFIG_FILE]
+```
