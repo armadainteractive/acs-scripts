@@ -46,8 +46,8 @@ def main():
             log.debug("Testing deployment using mode: " + mode)
             if mode == "mesos":
                 log.debug("Test Mesos mode")
-                test = MesosTest(acs)
-                test.test_all()
+                suite = unittest.TestLoader().loadTestsFromTestCase(MesosTest) 
+                unittest.TextTestRunner(verbosity=2).run(suite) 
             elif mode == "swarm":
                 log.debug("Test Swarm mode")
                 test = SwarmTest(acs)
