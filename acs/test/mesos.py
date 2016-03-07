@@ -13,6 +13,7 @@ class MesosTest(unittest.TestCase):
     def setUp(self):
         self.log = ACSLog()
         self.log.debug("setUp the test environment")
+        self.acs = ACSUtils()
         self.acs.marathonCommand('groups/azure?force=true', 'DELETE')
 
     def tearDown(self):
