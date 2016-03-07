@@ -19,7 +19,7 @@ def main():
     usage = usage + "test: test a cluster\n\n"
     usage = usage + "addFeature FEATURES: add one or mroe features to a cluster\n"
     usage = usage + "\tFEATURES is a comma separated list of features to add.\n\n"
-    usage = usage + "docker 'DOCKER COMMAND': run a Docker CLI command on all agents.\n\n"
+    usage = usage + "env: display some useful information about the ACS environment currently configured"
 
     p = optparse.OptionParser(usage=usage, version="%prog 0.1")
     p.add_option('--config_file', '-c', default="cluster.ini",
@@ -37,7 +37,9 @@ def main():
     elif cmd == "deploy":
         acs.createDeployment()
         acs.addFeatures()
-        acs.openMesosTunnel()
+        print(acs.getEnvironmentSettings)
+    elif cmd == "scale":
+        acs.scale(arguments[1])
     elif cmd == "test":
         if arguments[1] == "deploy":
             mode = acs.getMode()
@@ -66,7 +68,10 @@ def main():
         featureList = arguments[1]
         log.debug("Features: " + featureList)
         acs.addFeatures(featureList)
+    elif cmd == "env":
+        print(json.dumps(acs.getEnvironmentSettings(), indent=4))
     elif cmd == "docker":
+        # Deprecated
         acs.agentDockerCommand(arguments[1])
     else:
         log.error("Unkown command: " + cmd)

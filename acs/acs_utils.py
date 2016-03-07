@@ -1,61 +1,33 @@
 #!/usr/bin/python
 
+from AgentPool import *
+from ACSLogs import *
+import feature_afs as afs
+
 import ConfigParser
 import json
-import logging
 import os
+from os.path import expanduser
 import paramiko
+from paramiko import SSHClient
+from scp import SCPClient
 import subprocess
-
-class ACSLog:
-    def __init__(self, name = "acs"):
-        output_dir = 'logs'
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.DEBUG)
-        
-        if (not self.logger.handlers):
-            # create console handler and set level to info
-            handler = logging.StreamHandler()
-            handler.setLevel(logging.DEBUG)
-            formatter = logging.Formatter("%(levelname)s - %(message)s")
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
-            
-            # create error file handler and set level to error
-            handler = logging.FileHandler(os.path.join(output_dir, "error.log"),"w", encoding=None, delay="true")
-            handler.setLevel(logging.ERROR)
-            formatter = logging.Formatter("%(levelname)s - %(message)s")
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
-            
-            # create debug file handler and set level to debug
-            handler = logging.FileHandler(os.path.join(output_dir, "all.log"),"w")
-            handler.setLevel(logging.DEBUG)
-            formatter = logging.Formatter("%(levelname)s - %(message)s")
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
-
-    def info(self, msg):
-        self.logger.info(msg)
-
-    def debug(self, msg):
-        self.logger.debug(msg)
-
-    def warning(self, msg):
-        self.logger.warning(msg)
-
-    def error(self, msg):
-        self.logger.error(msg)
 
 class ACSUtils:
     def __init__(self, configfile = "cluster.ini"):
         self.log = ACSLog()
         self.log.debug("Reading config from " + configfile)
-        defaults = {"orchestratorType": "Mesos", "jumpboxOS": "Linux"}
+        defaults = {"orchestratorType": "Mesos"}
         config = ConfigParser.ConfigParser(defaults)
         config.read(configfile)
         config.set('Group', 'name', config.get('ACS', 'dnsPrefix'))
         self.config = config
+        
+        self.ssh = SSHClient()
+        self.ssh.load_system_host_keys()
+        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.ssh.connect(self.getManagementEndpoint(), username = self.config.get('ACS', "username"), port=2200)
+        self._configureSSH()
 
     def value(self, set_to):
         value = {}
@@ -65,11 +37,32 @@ class ACSUtils:
     def getACSParams(self):
         params = {}
         params["dnsNamePrefix"] = self.value(self.config.get('ACS', 'dnsPrefix'))
+        params["orchestratorType"] = self.value(self.config.get('ACS', 'orchestratorType'))
         params["agentCount"] = self.value(self.config.getint('ACS', 'agentCount'))
         params["agentVMSize"] = self.value(self.config.get('ACS', 'agentVMSize'))
         params["masterCount"] = self.value(self.config.getint('ACS', 'masterCount'))
         params["sshRSAPublicKey"] = self.value(self.config.get('ACS', 'sshPublicKey'))
         return params
+
+    def getEnvironmentSettings(self):
+        """
+        Return a dictionary of usefel information about the ACS configuration.
+        """
+        out = {}
+        
+        out["orchestratorType"] = self.getMode()
+        if self.getMode() == "SwarmPreview":
+            sshTunnel = "ssh -L 2375:localhost:2375 -N " + self.config.get('ACS', 'username') + '@' + self.getManagementEndpoint() + " -p 2200"
+        elif self.getMode() == "Mesos":
+            sshTunnel = "ssh -L 80:localhost:80 -N " + self.config.get('ACS', 'username') + '@' + self.getManagementEndpoint() + " -p 2200"
+        else:
+            sshTunnel = "(Need to add support to CLI to generate tunnel info for this orchestrator type)"
+        out["sshTunnel"] = sshTunnel
+        
+        public = self.config.get('ACS', 'dnsPrefix') + 'agents.' + self.config.get('Group', 'region').replace(" ", "").replace('"', '') + '.cloudapp.azure.com'
+        out["publicFQDN"] = public
+
+        return out
 
     def getMode(self):
         """Get the orchestrator mode for this instance of ACS"""
@@ -98,6 +91,10 @@ class ACSUtils:
         os.system(command)
 
     def createStorage(self):
+        """
+        Create a storage account for this cluster as defined in the config file.
+        FIXME: this and related storage methods should move to their own module or class
+        """
         self.log.debug("Creating Storage Account")
         self.createResourceGroup()
     
@@ -124,15 +121,24 @@ class ACSUtils:
             self.log.warning("Failed to create share, assuming it is because it already exists")
 
     def getStorageAccountKey(self):
+        """
+        Get the storage account key for the storage account defined in the ini file
+        FIXME: this and related storage methods should move to their own module or class
+        """
         command = "azure storage account keys list"
         command = command + " --resource-group " + self.config.get('Group', 'name')
         command = command + " " + self.config.get('Storage', 'name')
         command = command + " --json"
+        self.log.debug("Command to get storage keys: " + command)
 
         keys = json.loads(subprocess.check_output(command, shell=True))
-        return keys['storageAccountKeys']['key1']
+        return keys['key1']
 
     def getShareEndpoint(self):
+        """
+        Get the a share endpoint for the storage account defined in the ini file
+        FIXME: this and related storage methods should move to their own module or class
+        """
         command = "azure storage account show"
         command = command + " --resource-group " + self.config.get('Group', 'name')
         command = command + " " + self.config.get('Storage', 'name')
@@ -142,6 +148,13 @@ class ACSUtils:
         endpoint = data['primaryEndpoints']['file']
 
         return endpoint
+
+    def scale(self, capacity):
+        """
+        Scale the number of Agents availalbe to the supplied number
+        """
+        agentPool = AgentPool(self.config)
+        agentPool.scale(capacity)
 
     def getManagementEndpoint(self):
         return self.config.get('ACS', 'dnsPrefix') + 'mgmt.' + self.config.get('Group', 'region').replace(" ", "").replace('"', '') + '.cloudapp.azure.com'
@@ -183,105 +196,106 @@ class ACSUtils:
 
     def getAgentHostNames(self):
         # return a list of Agent Host Names in this cluster
-    
-        cmd = "azure resource list -r Microsoft.Compute/virtualMachines " + self.config.get('Group', 'name') +  " --json"
-        self.log.debug("Execute command: " + cmd)
+        
+        agentPool = AgentPool(self.config)
+        agents = agentPool.getAgents()
 
-        agents = json.loads(subprocess.check_output(cmd, shell=True))
         names = []
         for agent in agents:
-            name = agent['name']
+            name = agent['properties']['osProfile']['computerName']
             if "-agent-" in name:
                 names.append(name)
         return names
 
     def getMasterSSHConnection(self):
         url = self.getManagementEndpoint()
-        return "ssh -o StrictHostKeyChecking=no -o StrictHostKeyChecking=no " + self.config.get('ACS', 'username') + '@' + url + ' -p 2200'
+        return "ssh -o StrictHostKeyChecking=no " + self.config.get('ACS', 'username') + '@' + url + ' -p 2200'
 
-    def configureSSH(self):
+    def _configureSSH(self):
         """Configure SSH on the master so that it can connect to the agents"""
-        cmd = self.getMasterSSHConnection() + " " + "echo Hello Master"
-        self.log.debug("Making an SSH call to verify all is OK: " + cmd)
-        subprocess.check_output(cmd, shell=True)
+        home = expanduser("~")
+        localfile = home + "/.ssh/id_rsa"
+        remotefile = "~/.ssh/id_rsa"
+        with SCPClient(self.ssh.get_transport()) as scp:
+            scp.put(localfile, remotefile)
 
-        url = self.getManagementEndpoint()
-        conn = "scp -P 2200"
-        localfile = "~/.ssh/id_rsa"
-        remotefile = self.config.get('ACS', 'username') + '@' + url + ":~/.ssh/id_rsa"
-    
-        cmd = conn + " " + localfile + " " + remotefile
-        self.log.debug("SCP command: " + cmd)
 
-        out = subprocess.check_output(cmd, shell=True)
+    def executeOnMaster(self, cmd):
+        """
+OA        Execute command on the current master leader
+        """
+        self.log.debug("Running on master: " + cmd)
+        stdin, sterr, stdout = self.ssh.exec_command(cmd)
+        stdin.close()
+
+        for line in stdout.read().splitlines():
+            self.log.debug(line)
+
+    def executeOnAgent(self, cmd, agent_name):
+        """
+        Execute command on an agent identified by agent_name
+        """
+        sshAgentConnection = "ssh -o StrictHostKeyChecking=no " + self.config.get('ACS', 'username') + '@' + agent_name
+        self.log.debug("SSH Connection to agent: " + sshAgentConnection)
+
+        self.log.debug("Command to run on agent: " + cmd)
+
+        cmd = cmd.replace("\"", "\\\"")
+        sshCmd = sshAgentConnection + ' \'' + cmd + '\''
+        self.executeOnMaster(sshCmd)
 
     def agentDockerCommand(self, docker_cmd):
         """ Run a Docker command on each of the agents """
-        url = self.getManagementEndpoint()
-
-        sshMasterConnection = self.getMasterSSHConnection()
-        self.log.debug("SSH Master Connection: " + sshMasterConnection)
-
         hosts = self.getAgentHostNames()
         for host in hosts:
-            sshAgentConnection = "ssh -o StrictHostKeyChecking=no " + self.config.get('ACS', 'username') + '@' + host
-            self.log.debug("SSH Agent Connection: " + sshAgentConnection)
-
-            sshCommand = "docker " + docker_cmd
-            self.log.debug("Command to run: " + sshCommand)
-        
-            cmd = sshMasterConnection + ' "' + sshAgentConnection + ' \'' + sshCommand + '\'"'
-            out = subprocess.check_output(cmd, shell=True)
-            self.log.debug("Output:\n" + out)        
+            self.executeOnAgent("docker " + docker_cmd, host)
 
     def addFeatures(self, features = None):
-        """Add all fetures specified in the config file or the features
+        """Add all features specified in the config file or the features
         parameter (as a comma separated list) to this cluster. """
         if (features == None):
             features = self.config.get('Features', "featureList")
-        self.log.info("Adding features to ACS: " + features)
-        
+        if features == "":
+            self.log.info("No features to add")
+        else:
+            self.log.info("Adding features to ACS: " + features)
+
         featureList = [x.strip() for x in features.split(',')]
         for feature in featureList:
             self.log.debug("Adding feature: " + feature)
             hosts = self.getAgentHostNames()
             if feature == "afs":
                 self.createStorage()
-                self.configureSSH()
-                hosts = self.getAgentHostNames()
-                self.addAzureFileService(hosts)
+                afs.addTo(self)
+            elif feature == "oms":
+                self.addOMS()
             elif feature[:5] == "pull ":
                 print("'addFeature pull' is deprecated. Please use 'docker pull' instead")
                 self.agentDockerCommand(feature)
             else:
                 self.log.error("Unknown feature: " + feature)
 
-    def addAzureFileService(self, hosts):
-        # Add an Azure File Service to identified agents
-        url = self.getManagementEndpoint()
-        package = "cifs-utils"
-
-        sshMasterConnection = self.getMasterSSHConnection()
-        self.log.debug("SSH Master Connection: " + sshMasterConnection)
-
+    def addOMS(self):
+        """
+        Add OMS to all Agents using the details defined in the config
+        file (OMS_WORKSPACE_ID and OMS_WORKSPACE_PRIMARY_KEY).
+        """
+        hosts = self.getAgentHostNames()
         for host in hosts:
-            sshAgentConnection = "ssh -o StrictHostKeyChecking=no " + self.config.get('ACS', 'username') + '@' + host
-            self.log.debug("SSH Agent Connection: " + sshAgentConnection)
+            cmd = "wget https://github.com/Microsoft/OMS-Agent-for-Linux/releases/download/v1.1.0-28/omsagent-1.1.0-28.universal.x64.sh\n"
+            self.executeOnAgent(cmd, host)
 
-            mount = self.config.get("Storage", "mount")
-            sshCommand = "mkdir -p " + mount
-            self.log.debug("Command to run: " + sshCommand)
-        
-            cmd = sshMasterConnection + ' "' + sshAgentConnection + ' \'' + sshCommand + '\'"'
-            out = subprocess.check_output(cmd, shell=True)
-            self.log.debug("Output:\n" + out)
+            cmd = "chmod +x ./omsagent-1.1.0-28.universal.x64.sh\n"
+            self.executeOnAgent(cmd, host)
 
-            urn = self.getShareEndpoint().replace("https:", "") + self.config.get("Storage", "shareName")
-            username = self.config.get("Storage", "name")
-            password = self.getStorageAccountKey()
-            sshCommand = "sudo mount -t cifs " + urn + " " + mount + " -o uid=1000,gid=1000,vers=2.1,username=" + username + ",password=" + password
-            self.log.debug("Command to run: " + sshCommand)
-            cmd = sshMasterConnection + ' "' + sshAgentConnection + ' \'' + sshCommand + '\'"'
-            out = subprocess.check_output(cmd, shell=True)
-            self.log.debug("Output:\n" + out)
-        
+            workspace_id = self.config.get('OMS', "workspace_id")
+            workspace_key = self.config.get('OMS', "workspace_primary_key")
+            cmd = "sudo ./omsagent-1.1.0-28.universal.x64.sh --upgrade -w " + workspace_id + " -s " + workspace_key + "\n"
+            self.executeOnAgent(cmd, host)
+
+            cmd = "sudo sed -i -E \"s/(DOCKER_OPTS=\\\")(.*)\\\"/\\1\\2 --log-driver=fluentd --log-opt fluentd-address=localhost:25225\\\"/g\" /etc/default/docker\n"
+            self.executeOnAgent(cmd, host)
+
+            cmd = "sudo service docker restart\n"
+            self.executeOnAgent(cmd, host)
+

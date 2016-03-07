@@ -19,6 +19,10 @@ the REST API interfaces for managing applicaitons on an ACS cluster.
 
 Create a config.ini by copying config.ini.tmpl and editing accoringly.
 
+Create a [service principle for the
+application](http://rgardler.github.io/2016/02/10/create_keys_for_an_application_to_manage_azure)
+and add the details to your config.ini.
+
 # Command Line
 
 ```
@@ -93,6 +97,26 @@ python acs.py addFeature afs
 
 This will create a Storage Account on Azure, crate a share and mount
 that share on each of the agents in your cluster.
+
+### Operations Management Suite (oms)
+
+Add the
+[OMS](https://blogs.technet.microsoft.com/momteam/2015/11/03/announcing-linux-docker-container-management-with-oms/)
+monitoring solution to the cluster. You will first need to register
+for the OMS service and then complete the OMS section of the
+cluster.ini file. Finally, run the following command.
+
+Visit http://mms.microsoft.com and sign up for a free OMS
+account. Then click "Settings" and then "Connected Sources". You will
+need to copy your Workspace ID and your Workspace Primary Key into
+your config file. Finally, run the following command to install OMS on
+each of your agents (please note that this command restarts the Docker
+Engine and thus any containers on it will be stopped).
+
+```bash
+python acs.py addFeature oms
+```
+
 
 #### Known Issues
 
