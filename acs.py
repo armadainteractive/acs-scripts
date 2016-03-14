@@ -58,8 +58,8 @@ def main():
             feature = arguments[2]
             if feature == "afs":
                 log.debug("Test AFS Feature")
-                test = AFSTest(acs)
-                test.testAll()
+                suite = unittest.TestLoader().loadTestsFromTestCase(AFSTest) 
+                unittest.TextTestRunner(verbosity=2).run(suite) 
             else: 
                 log.error("Don't know how to test feature " + feature)
         else:

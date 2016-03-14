@@ -227,9 +227,13 @@ OA        Execute command on the current master leader
         self.log.debug("Running on master: " + cmd)
         stdin, sterr, stdout = self.ssh.exec_command(cmd)
         stdin.close()
-
+        
+        output = ""
         for line in stdout.read().splitlines():
             self.log.debug(line)
+            output = output + line + "\n"
+
+        return output
 
     def executeOnAgent(self, cmd, agent_name):
         """
@@ -242,7 +246,7 @@ OA        Execute command on the current master leader
 
         cmd = cmd.replace("\"", "\\\"")
         sshCmd = sshAgentConnection + ' \'' + cmd + '\''
-        self.executeOnMaster(sshCmd)
+        return self.executeOnMaster(sshCmd)
 
     def agentDockerCommand(self, docker_cmd):
         """ Run a Docker command on each of the agents """

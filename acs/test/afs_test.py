@@ -1,24 +1,26 @@
-from acs.acs_utils import ACSLog
+#!/usr/bin/python
+
+from acs.acs_utils import *
 import acs.feature_afs as afs
 
-class AFSTest:
-    def __init__(self, acs):
-        self.acs = acs
-        self.log = ACSLog()
+import unittest
 
-    def testAll(self):
-        self.testAddFeature()
+class AFSTest(unittest.TestCase):
+    def setUp(self):
+        self.log = ACSLog()
+        self.acs = ACSUtils()
 
     def testAddFeature(self):
         """
         Install the AFS feature on the current cluster and verify it is working.
         """
         afs.addTo(self.acs)
-
+        
         agents = self.acs.getAgentHostNames()
         for agent in agents:
-            cmd = "sudo initctl statsu azurefiles-dockervolumedriver"
-            output = self.acs.executeOnAgent(cmd, agent)
-            assertIsNotNone(output)
-            self.log.debug("command output: " + output)
+            # docker volume create -d azurefile -o share=myshare --name=myvol
+            # docker run -i -t -v myvol:/data busybox
+
             
+if __name__ == '__main__':
+    unittest.main()
