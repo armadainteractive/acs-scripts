@@ -12,6 +12,7 @@ import paramiko
 from paramiko import SSHClient
 from scp import SCPClient
 import subprocess
+import socket
 
 class ACSUtils:
     def __init__(self, configfile = "cluster.ini"):
@@ -23,17 +24,27 @@ class ACSUtils:
         if not config.has_option('Group', 'name'):
             config.set('Group', 'name', config.get('ACS', 'dnsPrefix'))
         self.config = config
-        
-        self.ssh = SSHClient()
-        self.ssh.load_system_host_keys()
-        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.ssh.connect(self.getManagementEndpoint(), username = self.config.get('ACS', "username"), port=2200)
-        self._configureSSH()
+        self.initSsh()
 
     def value(self, set_to):
         value = {}
         value["value"] = set_to
         return value
+
+    def initSsh(self):
+        if self.hostnameResolves(self.getManagementEndpoint()):
+            self.ssh = SSHClient()
+            self.ssh.load_system_host_keys()
+            self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            self.ssh.connect(self.getManagementEndpoint(), username = self.config.get('ACS', "username"), port=2200)
+            self._configureSSH()
+
+    def hostnameResolves(self, hostname):
+        try:
+            socket.gethostbyname(hostname)
+            return 1
+        except socket.error:
+            return 0
 
     def getACSParams(self):
         params = {}
@@ -50,7 +61,7 @@ class ACSUtils:
         Return a dictionary of usefel information about the ACS configuration.
         """
         out = {}
-        
+
         out["orchestratorType"] = self.getMode()
         if self.getMode() == "SwarmPreview":
             sshTunnel = "ssh -L 2375:localhost:2375 -N " + self.config.get('ACS', 'username') + '@' + self.getManagementEndpoint() + " -p 2200"
@@ -59,7 +70,7 @@ class ACSUtils:
         else:
             sshTunnel = "(Need to add support to CLI to generate tunnel info for this orchestrator type)"
         out["sshTunnel"] = sshTunnel
-        
+
         public = self.config.get('ACS', 'dnsPrefix') + 'agents.' + self.config.get('Group', 'region').replace(" ", "").replace('"', '') + '.cloudapp.azure.com'
         out["publicFQDN"] = public
 
@@ -88,8 +99,9 @@ class ACSUtils:
         command = command + " " + self.config.get('ACS', 'dnsPrefix')
         command = command + " --template-uri " + self.config.get('Template', 'templateUrl')
         command = command + " -p '" + json.dumps(self.getACSParams()) + "'"
-    
+
         os.system(command)
+        self.initSsh()
 
     def createStorage(self):
         """
@@ -98,13 +110,13 @@ class ACSUtils:
         """
         self.log.debug("Creating Storage Account")
         self.createResourceGroup()
-    
+
         command = "azure storage account create"
         command = command + " --type " + self.config.get('Storage', 'type')
         command = command + " --resource-group " + self.config.get('Group', 'name')
         command = command + " --location " + self.config.get('Group', 'region')
         command = command + " " + self.config.get('Storage', 'name')
-    
+
         os.system(command)
 
         key = self.getStorageAccountKey()
@@ -118,7 +130,7 @@ class ACSUtils:
             out = subprocess.check_output(command, shell=True)
         except:
             # FIXME: test if the share already exists, if it does then don't try to recreate it
-            # For now we just assume that an error is always that the share alrady exists 
+            # For now we just assume that an error is always that the share alrady exists
             self.log.warning("Failed to create share, assuming it is because it already exists")
 
     def getStorageAccountKey(self):
@@ -144,7 +156,7 @@ class ACSUtils:
         command = command + " --resource-group " + self.config.get('Group', 'name')
         command = command + " " + self.config.get('Storage', 'name')
         command = command + " --json"
-        
+
         data = json.loads(subprocess.check_output(command, shell=True))
         endpoint = data['primaryEndpoints']['file']
 
@@ -161,10 +173,10 @@ class ACSUtils:
         return self.config.get('ACS', 'dnsPrefix') + 'mgmt.' + self.config.get('Group', 'region').replace(" ", "").replace('"', '') + '.cloudapp.azure.com'
 
     def marathonCommand(self, command, method = 'GET', data = None):
-        curl = 'curl -s -X ' + method 
+        curl = 'curl -s -X ' + method
         if data != None:
             curl = curl + " -d \"" + data + "\" -H \"Content-type:application/json\""
-        cmd = curl + ' localhost:8080/v2/' + command 
+        cmd = curl + ' localhost:8080/v2/' + command
         self.log.debug('Command to execute: ' + cmd)
         return subprocess.check_output(cmd, shell=True)
 
@@ -197,7 +209,7 @@ class ACSUtils:
 
     def getAgentHostNames(self):
         # return a list of Agent Host Names in this cluster
-        
+
         agentPool = AgentPool(self.config)
         agents = agentPool.getAgents()
 
