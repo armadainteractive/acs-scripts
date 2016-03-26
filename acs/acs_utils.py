@@ -38,6 +38,8 @@ class ACSUtils:
             self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             self.ssh.connect(self.getManagementEndpoint(), username = self.config.get('ACS', "username"), port=2200)
             self._configureSSH()
+        else:
+            self.log.debug("Endpoint " + self.getManagementEndpoint() + " does not exist, cannot SSH into it.")
 
     def hostnameResolves(self, hostname):
         try:
